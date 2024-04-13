@@ -105,7 +105,7 @@ class AvocentPDU():
                 data2 = name.split(',')
                 statuses = data2[0]
                 self.current_deciamps = int(data2[1])
-                pdu_status = int(data2[2])
+                self.pdu_status_int = int(data2[2])
                 password_status = int(data2[3])
 
                 for N in range(self.number_outlets):
@@ -120,7 +120,7 @@ class AvocentPDU():
 
                 self.password_ok = True if password_status == 1 else False
 
-                self.pdu_status = "Normal" if pdu_status == 0 else "Warning!" if pdu_status == 1 else "Overloading!"
+                self.pdu_status = "Normal" if self.pdu_status_int == 0 else "Warning!" if self.pdu_status_int == 1 else "Overloading!"
 
     def is_valid_login(self):
         """Returns True if the password was accepted at initialization"""
@@ -129,6 +129,18 @@ class AvocentPDU():
     def switches(self):
         """Returns a list of outlets"""
         return self.switch_list
+
+    def get_current_deciamps(self):
+        """Returns the total current for the PDU in tenths of an ampere"""
+        return self.current_deciamps
+    
+    def get_pdu_status_string(self):
+        """Returns the PDU status string"""
+        return self.pdu_status
+    
+    def get_pdu_status_integer(self):
+        """Returns the PDU status integer"""
+        return self.pdu_status_int
 
     def __repr__(self):
         switch_vals = ', '.join(map(repr, self.switch_list))
