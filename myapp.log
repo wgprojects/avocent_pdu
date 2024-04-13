@@ -1,0 +1,3 @@
+INFO:root:Avocent PDU init
+INFO:root:turn_on({self.name}) 
+INFO:root:update() called
