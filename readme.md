@@ -1,13 +1,14 @@
-Status and Control of Avocent PDU DPDU10x DPDU20x
+#Status and Control of Avocent PDU DPDU10x DPDU20x
+DPDU101 DPDU102 DPDU103 DPDU201 DPDU202 DPDU203
 Tested on DPDU101
 
-# Manual UI notes:
-# Press and hold the key after:
-#    1 beep; it can let the meter to show up the current information,
-#      temperature and humidity in sequence.(by model)
-#    2 beep; it can let the meter to show up the IP address
-#    4 beep; it can change the way to get IP by DHCP or fixed IP.
-#    6 beep; it can reset PDU back to default setting.
+Manual UI notes:
+Press and hold the key after:
+    1 beep; it can let the meter to show up the current information,
+      temperature and humidity in sequence.(by model)
+    2 beep; it can let the meter to show up the IP address
+    4 beep; it can change the way to get IP by DHCP or fixed IP.
+    6 beep; it can reset PDU back to default setting.
 
 Usage:
 
