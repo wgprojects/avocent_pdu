@@ -18,18 +18,18 @@ import requests
 
 class Outlet():
     """Child class of an Avocent PDU representing a controllable outlet.
-    Construct an AvocentPDU and call .switches() to get a list of these objects.
+    Construct an AvocentDPDU and call .switches() to get a list of these objects.
     """
     name = "ERR: Not Found"
 
-    def __init__(self, avocent_pdu: 'AvocentPDU', outlet_idx: int, number_outlets: int):
+    def __init__(self, avocent_pdu: 'AvocentDPDU', outlet_idx: int, number_outlets: int):
         self.pdu = avocent_pdu
         outlet_id = outlet_idx + 1
         self.is_on_bool = False
 
         # e.g. 0100000 to control OutletB 
         # or 11111111 to control all outlets on an 8 port unit
-        self.switch_flag = '0'*(outlet_idx) + '1' + '0'*(number_outlets-outlet_idx) 
+        self.switch_flag = '0'*(outlet_idx) + '1' + '0'*(number_outlets-outlet_idx)
 
         name_resp = requests.get(f'http://{self.pdu.host}/switch{outlet_id}.cgi', timeout=2)
         if name_resp.ok:
@@ -68,7 +68,7 @@ class SwitchCommand(Enum):
 
 # Default Username 'snmp'
 # Default Password '1234'
-class AvocentPDU():
+class AvocentDPDU():
     """Main class representing an Avocent PDU"""
 
     def __init__(self, host, username, password, number_outlets):
@@ -109,7 +109,7 @@ class AvocentPDU():
                 password_status = int(data2[3])
 
                 for N in range(self.number_outlets):
-                    self.switch_list[N].is_on_bool = (statuses[N] == '1') 
+                    self.switch_list[N].is_on_bool = statuses[N] == '1'
 
                 if password_status == 2:
                     self.password_status = "Incorrect username or password"
@@ -120,7 +120,9 @@ class AvocentPDU():
 
                 self.password_ok = True if password_status == 1 else False
 
-                self.pdu_status = "Normal" if self.pdu_status_int == 0 else "Warning!" if self.pdu_status_int == 1 else "Overloading!"
+                self.pdu_status = "Normal" if self.pdu_status_int == 0 \
+                    else "Warning!" if self.pdu_status_int == 1\
+                    else "Overloading!"
 
     def is_valid_login(self):
         """Returns True if the password was accepted at initialization"""
@@ -133,11 +135,11 @@ class AvocentPDU():
     def get_current_deciamps(self):
         """Returns the total current for the PDU in tenths of an ampere"""
         return self.current_deciamps
-    
+
     def get_pdu_status_string(self):
         """Returns the PDU status string"""
         return self.pdu_status
-    
+
     def get_pdu_status_integer(self):
         """Returns the PDU status integer"""
         return self.pdu_status_int
@@ -151,7 +153,7 @@ class AvocentPDU():
 
 if __name__ == "__main__":
     _LOGGER.basicConfig(level=_LOGGER.INFO)
-    A = AvocentPDU('192.168.1.131', 'snmp', '1234', 8)
+    A = AvocentDPDU('192.168.1.131', 'snmp', '1234', 8)
     print(A)
 
     switches = A.switches()

@@ -1,0 +1,18 @@
+[project]
+name = "avocentdpdu"
+version = "0.0.3"
+authors = [
+  { name="William Gibson", email="william.gibson.wg@gmail.com" },
+]
+description = "Library to control Avocent DPDU10x PDUs"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/wgprojects/avocent_pdu"
+Issues = "https://github.com/wgprojects/avocent_pdu/issues"

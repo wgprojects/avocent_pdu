@@ -1,0 +1,9 @@
+LICENSE
+README.md
+pyproject.toml
+src/avocentdpdu/__init__.py
+src/avocentdpdu/avocentdpdu.py
+src/avocentdpdu.egg-info/PKG-INFO
+src/avocentdpdu.egg-info/SOURCES.txt
+src/avocentdpdu.egg-info/dependency_links.txt
+src/avocentdpdu.egg-info/top_level.txt
