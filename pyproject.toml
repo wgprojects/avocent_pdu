@@ -1,6 +1,6 @@
 [project]
 name = "avocentdpdu"
-version = "0.0.3"
+version = "0.0.5"
 authors = [
   { name="William Gibson", email="william.gibson.wg@gmail.com" },
 ]
