@@ -2,8 +2,8 @@
 
 from enum import Enum
 import logging as _LOGGER
-import requests
-
+import asyncio
+import aiohttp
 
 # Avocent PDU DPDU10x
 # Tested on DPDU101
@@ -22,20 +22,26 @@ class Outlet():
     """
     name = "ERR: Not Found"
 
-    def __init__(self, avocent_pdu: 'AvocentDPDU', outlet_idx: int, number_outlets: int):
+    def __init__(self, avocent_pdu: 'AvocentDPDU', outlet_idx: int, number_outlets: int, timeout: int):
         self.pdu = avocent_pdu
-        outlet_id = outlet_idx + 1
+        self.outlet_idx = outlet_idx
+        self.outlet_id = outlet_idx + 1
         self.is_on_bool = False
+        self.timeout = timeout
 
         # e.g. 0100000 to control OutletB 
         # or 11111111 to control all outlets on an 8 port unit
         self.switch_flag = '0'*(outlet_idx) + '1' + '0'*(number_outlets-outlet_idx)
 
-        name_resp = requests.get(f'http://{self.pdu.host}/switch{outlet_id}.cgi', timeout=2)
-        if name_resp.ok:
-            self.name = name_resp.text.strip()
-        else:
-            _LOGGER.warning("Could not find Avocent PDU outlet index %d at %s", outlet_idx, self.pdu.host)
+    async def obtain_name(self):
+        """Call after initialization to obtain outlet name from PDU"""
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f'http://{self.pdu.host}/switch{self.outlet_id}.cgi', timeout=self.timeout) as response:
+                if response.status == 200:
+                    html = await response.text()
+                    self.name = html.strip()
+                else:
+                    _LOGGER.warning("Could not find Avocent PDU outlet index %d at %s", self.outlet_idx, self.pdu.host)
 
     def is_on(self):
         """Returns boolean status of this outlet on=True"""
@@ -45,15 +51,19 @@ class Outlet():
         """Returns status of this outlet as string On/Off"""
         return 'On' if self.is_on_bool else 'Off'
 
-    def turn_on(self):
+    def get_name(self):
+        """Returns Avocent name for the outlet"""
+        return self.name
+
+    async def turn_on(self):
         """Command to turn outlet on"""
         _LOGGER.info('turn_on(%s)', self.name)
-        self.pdu.command_state(SwitchCommand.TURN_ON, self.switch_flag)
+        await self.pdu.command_state(SwitchCommand.TURN_ON, self.switch_flag)
 
-    def turn_off(self):
+    async def turn_off(self):
         """Command to turn outlet off"""
         _LOGGER.info('turn_off(%s)', self.name)
-        self.pdu.command_state(SwitchCommand.TURN_OFF, self.switch_flag)
+        await self.pdu.command_state(SwitchCommand.TURN_OFF, self.switch_flag)
 
     def __repr__(self):
         return f'{self.name}: {self.is_on_string()}'
@@ -71,7 +81,7 @@ class SwitchCommand(Enum):
 class AvocentDPDU():
     """Main class representing an Avocent PDU"""
 
-    def __init__(self, host, username, password, number_outlets):
+    def __init__(self, host, username, password, number_outlets, timeout):
         _LOGGER.info('Avocent PDU init')
         self.host = host
         self.username = username
@@ -79,50 +89,73 @@ class AvocentDPDU():
         self.number_outlets = number_outlets
         self.password_status = "Not attempted"
         self.password_ok = False
-        self.switch_list = [Outlet(self, N, number_outlets) for N in range(self.number_outlets)]
+        self.switch_list = [Outlet(self, N, number_outlets, timeout) for N in range(self.number_outlets)]
+        self.timeout = timeout
+        self.pdu_status = "unknown"
+        self.pdu_status_int = -1
+        self.current_deciamps = 0
+        self.password_status = "unknown"
+        self.is_initialized = False
 
-        self.command_state(SwitchCommand.TURN_OFF, "0"*number_outlets)
-        self.update()
+    async def initialize(self) -> None:
+        """Call once after construction to test login, and obtain Outlet names"""
+        await self.command_state(SwitchCommand.TURN_OFF, "0"*self.number_outlets)
+        tasks = []
+        for s in self.switch_list:
+            tasks.append(s.obtain_name())
+        await asyncio.gather(*tasks)
+        self.is_initialized = True
 
-    def command_state(self, cmd_on: SwitchCommand, which_switches: str):
+    async def command_state(self, cmd_on: SwitchCommand, which_switches: str):
         """Command PDU to change one or more outlet states
         Note: The Avocent PDU commits the cardinal sin of using a GET request to change state
         """
 
         endpoint = '1' if cmd_on == SwitchCommand.TURN_ON else '3'
-        requests.get(f'http://{self.host}/{endpoint}?3={self.username},{self.password},{which_switches},', timeout=2)
 
-    def update(self):
+        async with aiohttp.ClientSession() as session:
+            url = f'http://{self.host}/{endpoint}?3={self.username},{self.password},{which_switches},'
+            session.get(url, timeout=self.timeout)
+            # Response is always 404 with no body, even on success. Do nothing.
+
+
+    async def update(self) -> None:
         """Get the status of the PDU"""
-        ctrlResp = requests.get(f'http://{self.host}/control.cgi', timeout=2)
-        if ctrlResp.ok:
-            # Note: Unusual variable names were taken from Avocent Javascript
-            document = ctrlResp.text
-            # Basic HTML parsing
-            if "Z1" in document:
-                name = document.split('name=')[1]
-                _LOGGER.debug('Avocent Status = %s', name)
-                data2 = name.split(',')
-                statuses = data2[0]
-                self.current_deciamps = int(data2[1])
-                self.pdu_status_int = int(data2[2])
-                password_status = int(data2[3])
 
-                for N in range(self.number_outlets):
-                    self.switch_list[N].is_on_bool = statuses[N] == '1'
+        if not self.is_initialized:
+            await self.initialize()
 
-                if password_status == 2:
-                    self.password_status = "Incorrect username or password"
-                elif password_status == 1:
-                    self.password_status = "Login OK"
-                else:
-                    self.password_status = "Login status unknown"
+        async with aiohttp.ClientSession() as session:
+            url = f'http://{self.host}/control.cgi'
+            async with session.get(url, timeout=self.timeout) as response:
+                if response.status == 200:
+                    document = await response.text()
+                    # Basic HTML parsing
+                    if "Z1" in document:
+                        name = document.split('name=')[1]
+                        _LOGGER.debug('Avocent Status = %s', name)
+                        data2 = name.split(',')
+                        statuses = data2[0]
+                        self.current_deciamps = int(data2[1])
+                        self.pdu_status_int = int(data2[2])
+                        password_status = int(data2[3])
 
-                self.password_ok = True if password_status == 1 else False
+                        for N in range(self.number_outlets):
+                            self.switch_list[N].is_on_bool = statuses[N] == '1'
 
-                self.pdu_status = "Normal" if self.pdu_status_int == 0 \
-                    else "Warning!" if self.pdu_status_int == 1\
-                    else "Overloading!"
+                        if password_status == 2:
+                            self.password_status = "Incorrect username or password"
+                        elif password_status == 1:
+                            self.password_status = "Login OK"
+                        else:
+                            self.password_status = "Login status unknown"
+
+                        self.password_ok = True if password_status == 1 else False
+
+                        self.pdu_status = "Normal" if self.pdu_status_int == 0 \
+                            else "Warning!" if self.pdu_status_int == 1\
+                            else "Overloading!"
+        return
 
     def is_valid_login(self):
         """Returns True if the password was accepted at initialization"""
@@ -151,18 +184,24 @@ class AvocentDPDU():
         login:{self.password_status}\n {switch_vals} >"
 
 
-if __name__ == "__main__":
-    _LOGGER.basicConfig(level=_LOGGER.INFO)
-    A = AvocentDPDU('192.168.1.131', 'snmp', '1234', 8)
-    print(A)
+# async def main():
+#     _LOGGER.basicConfig(level=_LOGGER.INFO)
+#     A = AvocentDPDU('192.168.1.131', 'snmp', '1234', 8, 10)
+#     await A.update()
+#     print(A)
 
-    switches = A.switches()
+#     switches = A.switches()
 
-    # switch = switches[2]
-    # if switch.is_on:
-    #     switch.turn_off()
-    # else:
-    #     switch.turn_on()
-    #
-    # A.update()
-    # print(switch)
+#     switch = switches[2]
+#     if switch.is_on():
+#         await switch.turn_off()
+#     else:
+#         await switch.turn_on()
+
+#     await A.update()
+#     print(switch)
+
+# if __name__ == "__main__":
+#     loop = asyncio.get_event_loop()
+#     loop.run_until_complete(main())
+#     loop.close()

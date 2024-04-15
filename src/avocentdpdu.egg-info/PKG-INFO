@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: avocentdpdu
-Version: 0.0.5
+Version: 1.0.0
 Summary: Library to control Avocent DPDU10x PDUs
 Author-email: William Gibson <william.gibson.wg@gmail.com>
 Project-URL: Homepage, https://github.com/wgprojects/avocent_pdu
@@ -30,7 +30,7 @@ pip install avocentdpdu
 
 # Usage:
 ```
-from avocentdpdu import AvocentDPDU
+from avocentdpdu.avocentdpdu import AvocentDPDU
 A = AvocentDPDU('192.168.1.131', 'snmp', '1234', 8)
 print(A)
 switch = A.switches()[2]        # Select a switch/outlet
