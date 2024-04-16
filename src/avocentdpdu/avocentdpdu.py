@@ -96,14 +96,28 @@ class AvocentDPDU():
         self.current_deciamps = 0
         self.password_status = "unknown"
         self.is_initialized = False
+        self.mac = ""
+
+    async def obtain_mac(self) -> str:
+        """Get PDU's MAC address from index page"""
+        async with aiohttp.ClientSession() as session:
+            url = f'http://{self.host}/mac.cgi'
+            async with session.get(url, timeout=self.timeout) as response:
+                return await response.text()
 
     async def initialize(self) -> None:
         """Call once after construction to test login, and obtain Outlet names"""
+        self.mac = await self.obtain_mac()  # Get MAC address identifier
+
+        # Pointless command used to test authentication
         await self.command_state(SwitchCommand.TURN_OFF, "0"*self.number_outlets)
+
+        # Request names for all outlets
         tasks = []
         for s in self.switch_list:
             tasks.append(s.obtain_name())
         await asyncio.gather(*tasks)
+
         self.is_initialized = True
 
     async def command_state(self, cmd_on: SwitchCommand, which_switches: str):
