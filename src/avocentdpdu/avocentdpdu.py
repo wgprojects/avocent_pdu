@@ -37,8 +37,8 @@ class Outlet():
         """Call after initialization to obtain outlet name from PDU"""
         async with aiohttp.ClientSession() as session:
             async with session.get(f'http://{self.pdu.host}/switch{self.outlet_id}.cgi', timeout=self.timeout) as response:
+                html = await response.text()
                 if response.status == 200:
-                    html = await response.text()
                     self.name = html.strip()
                 else:
                     _LOGGER.warning("Could not find Avocent PDU outlet index %d at %s", self.outlet_idx, self.pdu.host)
@@ -115,9 +115,9 @@ class AvocentDPDU():
 
         async with aiohttp.ClientSession() as session:
             url = f'http://{self.host}/{endpoint}?3={self.username},{self.password},{which_switches},'
-            session.get(url, timeout=self.timeout)
-            # Response is always 404 with no body, even on success. Do nothing.
-
+            async with session.get(url, timeout=self.timeout) as response:
+                await response.text()
+                # Response is always 404 with no body, even on success. Do nothing.
 
     async def update(self) -> None:
         """Get the status of the PDU"""
@@ -128,8 +128,8 @@ class AvocentDPDU():
         async with aiohttp.ClientSession() as session:
             url = f'http://{self.host}/control.cgi'
             async with session.get(url, timeout=self.timeout) as response:
+                document = await response.text()
                 if response.status == 200:
-                    document = await response.text()
                     # Basic HTML parsing
                     if "Z1" in document:
                         name = document.split('name=')[1]
@@ -184,24 +184,25 @@ class AvocentDPDU():
         login:{self.password_status}\n {switch_vals} >"
 
 
-# async def main():
-#     _LOGGER.basicConfig(level=_LOGGER.INFO)
-#     A = AvocentDPDU('192.168.1.131', 'snmp', '1234', 8, 10)
-#     await A.update()
-#     print(A)
+async def main():
+    _LOGGER.basicConfig(level=_LOGGER.INFO)
+    A = AvocentDPDU('192.168.1.131', 'snmp', '1234', 8, 10)
+    await A.update()
+    print(A)
 
-#     switches = A.switches()
+    switches = A.switches()
 
-#     switch = switches[2]
-#     if switch.is_on():
-#         await switch.turn_off()
-#     else:
-#         await switch.turn_on()
+    switch = switches[2]
+    if switch.is_on():
+        await switch.turn_off()
+    else:
+        await switch.turn_on()
 
-#     await A.update()
-#     print(switch)
+    await A.update()
+    print(switch)
 
-# if __name__ == "__main__":
-#     loop = asyncio.get_event_loop()
-#     loop.run_until_complete(main())
-#     loop.close()
+if __name__ == "__main__":
+    print("laksjdla")
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+    loop.close()
