@@ -31,7 +31,7 @@ class Outlet():
 
         # e.g. 0100000 to control OutletB 
         # or 11111111 to control all outlets on an 8 port unit
-        self.switch_flag = '0'*(outlet_idx) + '1' + '0'*(number_outlets-outlet_idx)
+        self.switch_flag = '0'*(outlet_idx) + '1' + '0'*(number_outlets-outlet_idx-1)
 
     async def obtain_name(self):
         """Call after initialization to obtain outlet name from PDU"""
@@ -81,15 +81,15 @@ class SwitchCommand(Enum):
 class AvocentDPDU():
     """Main class representing an Avocent PDU"""
 
-    def __init__(self, host, username, password, number_outlets, timeout):
-        _LOGGER.info('Avocent PDU init')
+    def __init__(self, host, username, password, timeout):
+        _LOGGER.debug('Avocent PDU init')
         self.host = host
         self.username = username
         self.password = password
-        self.number_outlets = number_outlets
+        self.number_outlets = -1
         self.password_status = "Not attempted"
         self.password_ok = False
-        self.switch_list = [Outlet(self, N, number_outlets, timeout) for N in range(self.number_outlets)]
+        self.switch_list = []
         self.timeout = timeout
         self.pdu_status = "unknown"
         self.pdu_status_int = -1
@@ -109,7 +109,13 @@ class AvocentDPDU():
         """Call once after construction to test login, and obtain Outlet names"""
         self.mac = await self.obtain_mac()  # Get MAC address identifier
 
-        # Pointless command used to test authentication
+        self.number_outlets = await self.query_num_outlets()
+        assert self.number_outlets > 0
+
+        _LOGGER.debug("PDU has %s outlets.", self.number_outlets)
+        self.switch_list = [Outlet(self, N, self.number_outlets, self.timeout) for N in range(self.number_outlets)]
+
+        # Pointless command used to test authentication (determined after an update())
         await self.command_state(SwitchCommand.TURN_OFF, "0"*self.number_outlets)
 
         # Request names for all outlets
@@ -119,6 +125,9 @@ class AvocentDPDU():
         await asyncio.gather(*tasks)
 
         self.is_initialized = True
+
+        await self.update()
+        _LOGGER.debug("PDU Authenticated: %s", self.is_valid_login())
 
     async def command_state(self, cmd_on: SwitchCommand, which_switches: str):
         """Command PDU to change one or more outlet states
@@ -133,11 +142,27 @@ class AvocentDPDU():
                 await response.text()
                 # Response is always 404 with no body, even on success. Do nothing.
 
+    async def query_num_outlets(self) -> int:
+        """Check status and count number of reported outlet flags"""
+        async with aiohttp.ClientSession() as session:
+            url = f'http://{self.host}/control.cgi'
+            async with session.get(url, timeout=self.timeout) as response:
+                document = await response.text()
+                if response.status == 200:
+                    # Basic HTML parsing
+                    if "Z1" in document:
+                        name = document.split('name=')[1]
+                        data2 = name.split(',')
+                        statuses = data2[0]
+                        return len(statuses)
+        return -1
+
     async def update(self) -> None:
         """Get the status of the PDU"""
 
         if not self.is_initialized:
             await self.initialize()
+            return
 
         async with aiohttp.ClientSession() as session:
             url = f'http://{self.host}/control.cgi'
@@ -199,24 +224,24 @@ class AvocentDPDU():
 
 
 async def main():
-    _LOGGER.basicConfig(level=_LOGGER.INFO)
-    A = AvocentDPDU('192.168.1.131', 'snmp', '1234', 8, 10)
-    await A.update()
+    _LOGGER.basicConfig(level=_LOGGER.DEBUG)
+    A = AvocentDPDU('192.168.1.131', 'snmp', '1234', 10)
+    await A.initialize()
+    # await A.update()
     print(A)
 
-    switches = A.switches()
+    # switches = A.switches()
 
-    switch = switches[2]
-    if switch.is_on():
-        await switch.turn_off()
-    else:
-        await switch.turn_on()
+    # switch = switches[2]
+    # if switch.is_on():
+    #     await switch.turn_off()
+    # else:
+    #     await switch.turn_on()
 
-    await A.update()
-    print(switch)
+    # await A.update()
+    # print(switch)
 
 if __name__ == "__main__":
-    print("laksjdla")
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
     loop.close()

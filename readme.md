@@ -18,11 +18,12 @@ pip install avocentdpdu
 ```
 from avocentdpdu.avocentdpdu import AvocentDPDU
 A = AvocentDPDU('192.168.1.131', 'snmp', '1234', 8)
+await A.initialize()            # Initialize one time
 print(A)
 switch = A.switches()[2]        # Select a switch/outlet
 print(switch.name)              # Print the name given by Avocent
-switch.turn_off()               # Command the outlet to turn off
-A.update()                      # Status of all switches is only updated on update() and on initialization
+await switch.turn_off()         # Command the outlet to turn off
+await A.update()                # Status of all switches is only updated on update() and on initialization
 print(A.get_current_deciamps()) # Total current (tenths of an ampere)
 print(switch.is_on_string)      # Print the switch status
 ```
